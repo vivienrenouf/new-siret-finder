@@ -59,10 +59,10 @@ Tu verras s'afficher :
 ```
 Fenêtre : 2026-05-18 → 2026-05-22 | départements 76,27 | 24 codes NAF
   page 1: 32 résultats (total 32)
-32 SIRET trouvés → output/siret_76-27_2026-05-18_2026-05-22.xlsx
+32 SIRET trouvés (76=20, 27=12) → output/siret_76-27_2026-05-18_2026-05-22.xlsx
 ```
 
-Le fichier Excel atterrit dans `output/`, nommé avec les départements et la fenêtre de dates.
+Le fichier Excel atterrit dans `output/`, nommé avec les départements et la fenêtre de dates. **Un onglet par département** est créé à l'intérieur du fichier (ex : un onglet "76" et un onglet "27").
 
 ---
 
@@ -76,6 +76,7 @@ Le fichier Excel atterrit dans `output/`, nommé avec les départements et la fe
 | `adresse` | Adresse de l'établissement |
 | `code_postal` | Code postal |
 | `commune` | Commune |
+| `departement` | Code département (dérivé du code commune INSEE) |
 | `date_creation` | Date de création de l'établissement |
 | `type_creation` | `Nouvelle entreprise` (SIREN tout neuf) ou `Nouvel établissement` (entreprise existante) |
 | `date_creation_entreprise` | Date de création du SIREN |
