@@ -122,6 +122,17 @@ def _adresse(adr: dict) -> str:
     return " ".join(p for p in parts if p)
 
 
+def _departement(adr: dict) -> str | None:
+    code = adr.get("codeCommuneEtablissement")
+    if not code:
+        return None
+    if code.startswith(("2A", "2B")):
+        return code[:2]
+    if code.startswith(("97", "98")):
+        return code[:3]
+    return code[:2]
+
+
 def flatten(etab: dict) -> dict:
     unite = etab.get("uniteLegale", {})
     adr = etab.get("adresseEtablissement", {})
@@ -139,6 +150,7 @@ def flatten(etab: dict) -> dict:
         "adresse": _adresse(adr),
         "code_postal": adr.get("codePostalEtablissement"),
         "commune": adr.get("libelleCommuneEtablissement"),
+        "departement": _departement(adr),
         "date_creation": date_etab,
         "type_creation": type_creation,
         "date_creation_entreprise": date_unite,
@@ -171,8 +183,8 @@ def main() -> None:
     rows = [flatten(e) for e in etablissements]
     df = pd.DataFrame(rows, columns=[
         "siret", "denomination", "enseigne", "adresse",
-        "code_postal", "commune", "date_creation", "type_creation",
-        "date_creation_entreprise", "naf", "naf_libelle",
+        "code_postal", "commune", "departement", "date_creation",
+        "type_creation", "date_creation_entreprise", "naf", "naf_libelle",
     ])
 
     OUTPUT_DIR.mkdir(exist_ok=True)
