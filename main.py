@@ -190,8 +190,15 @@ def main() -> None:
     OUTPUT_DIR.mkdir(exist_ok=True)
     dept_tag = "-".join(departments)
     out = OUTPUT_DIR / f"siret_{dept_tag}_{start}_{end}.xlsx"
-    df.to_excel(out, index=False)
-    print(f"{len(df)} SIRET trouvés → {out}")
+    with pd.ExcelWriter(out, engine="openpyxl") as writer:
+        for dept in departments:
+            sub = df[df["departement"] == dept]
+            sub.to_excel(writer, sheet_name=dept, index=False)
+        others = df[~df["departement"].isin(departments)]
+        if not others.empty:
+            others.to_excel(writer, sheet_name="Autres", index=False)
+    counts = ", ".join(f"{d}={len(df[df['departement'] == d])}" for d in departments)
+    print(f"{len(df)} SIRET trouvés ({counts}) → {out}")
 
 
 if __name__ == "__main__":
