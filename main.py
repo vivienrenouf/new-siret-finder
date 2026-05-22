@@ -1,3 +1,4 @@
+import json
 import os
 import sys
 from datetime import date, timedelta
@@ -8,36 +9,11 @@ import pandas as pd
 from dotenv import load_dotenv
 
 BASE_URL = "https://api.insee.fr/api-sirene/3.11/siret"
+NAF_META_URL = "https://api.insee.fr/metadonnees/V1/codes/nafr2/sousClasse"
 PAGE_SIZE = 1000
 TIMEOUT = httpx.Timeout(30.0)
 OUTPUT_DIR = Path(__file__).parent / "output"
-
-NAF_LABELS = {
-    "69.10Z": "Activités juridiques",
-    "69.20Z": "Activités comptables",
-    "70.21Z": "Conseil en relations publiques et communication",
-    "70.22Z": "Conseil pour les affaires et autres conseils de gestion",
-    "71.11Z": "Activités d'architecture",
-    "71.12A": "Activité des géomètres",
-    "71.12B": "Ingénierie, études techniques",
-    "71.20B": "Analyses, essais et inspections techniques",
-    "74.10Z": "Activités spécialisées de design",
-    "74.20Z": "Activités photographiques",
-    "74.30Z": "Traduction et interprétation",
-    "74.90A": "Activité des économistes de la construction",
-    "74.90B": "Activités spécialisées, scientifiques et techniques diverses",
-    "75.00Z": "Activités vétérinaires",
-    "85.59A": "Formation continue d'adultes",
-    "85.59B": "Autres enseignements",
-    "86.21Z": "Activité des médecins généralistes",
-    "86.22A": "Activités de radiodiagnostic et de radiothérapie",
-    "86.22B": "Activités chirurgicales",
-    "86.22C": "Autres activités des médecins spécialistes",
-    "86.23Z": "Pratique dentaire",
-    "86.90D": "Activités des infirmiers et des sages-femmes",
-    "86.90E": "Activités des professionnels de la rééducation, de l'appareillage et des pédicures-podologues",
-    "86.90F": "Activités de santé humaine non classées ailleurs",
-}
+NAF_CACHE_FILE = Path(__file__).parent / "naf_cache.json"
 
 
 def week_window(today: date) -> tuple[date, date]:
@@ -56,6 +32,40 @@ def build_query(start: date, end: date, departments: list[str], naf_codes: list[
     naf_inner = " OR ".join(f"activitePrincipaleEtablissement:{n}" for n in naf_codes)
     naf_clause = f"periode({naf_inner})"
     return f"{date_clause} AND ({dept_clause}) AND {naf_clause}"
+
+
+def get_naf_labels(codes: list[str], api_key: str) -> dict[str, str]:
+    """Return {naf_code: label}, hitting INSEE Métadonnées for missing entries.
+
+    Results are persisted to NAF_CACHE_FILE so subsequent runs are offline-friendly.
+    Codes that the API doesn't recognize are silently skipped.
+    """
+    cache: dict[str, str] = {}
+    if NAF_CACHE_FILE.exists():
+        cache = json.loads(NAF_CACHE_FILE.read_text(encoding="utf-8"))
+    missing = [c for c in codes if c not in cache]
+    if not missing:
+        return cache
+
+    headers = {
+        "X-INSEE-Api-Key-Integration": api_key,
+        "Accept": "application/json",
+    }
+    print(f"  fetch libellés NAF pour {len(missing)} codes…", file=sys.stderr)
+    with httpx.Client(timeout=TIMEOUT) as client:
+        for code in missing:
+            resp = client.get(f"{NAF_META_URL}/{code}", headers=headers)
+            if resp.is_success:
+                label = resp.json().get("intitule")
+                if label:
+                    cache[code] = label
+            else:
+                print(f"    ⚠ {code}: HTTP {resp.status_code}", file=sys.stderr)
+    NAF_CACHE_FILE.write_text(
+        json.dumps(cache, ensure_ascii=False, indent=2, sort_keys=True),
+        encoding="utf-8",
+    )
+    return cache
 
 
 def fetch_all_siret(query: str, api_key: str) -> list[dict]:
@@ -133,7 +143,7 @@ def _departement(adr: dict) -> str | None:
     return code[:2]
 
 
-def flatten(etab: dict) -> dict:
+def flatten(etab: dict, naf_labels: dict[str, str]) -> dict:
     unite = etab.get("uniteLegale", {})
     adr = etab.get("adresseEtablissement", {})
     periode = _latest_periode(etab)
@@ -143,6 +153,7 @@ def flatten(etab: dict) -> dict:
         type_creation = "Nouvelle entreprise" if date_etab == date_unite else "Nouvel établissement"
     else:
         type_creation = None
+    naf = periode.get("activitePrincipaleEtablissement")
     return {
         "siret": etab.get("siret"),
         "denomination": _denomination(unite),
@@ -154,8 +165,8 @@ def flatten(etab: dict) -> dict:
         "date_creation": date_etab,
         "type_creation": type_creation,
         "date_creation_entreprise": date_unite,
-        "naf": periode.get("activitePrincipaleEtablissement"),
-        "naf_libelle": NAF_LABELS.get(periode.get("activitePrincipaleEtablissement", "")),
+        "naf": naf,
+        "naf_libelle": naf_labels.get(naf) if naf else None,
     }
 
 
@@ -178,9 +189,10 @@ def main() -> None:
         file=sys.stderr,
     )
 
+    naf_labels = get_naf_labels(naf_codes, api_key)
     query = build_query(start, end, departments, naf_codes)
     etablissements = fetch_all_siret(query, api_key)
-    rows = [flatten(e) for e in etablissements]
+    rows = [flatten(e, naf_labels) for e in etablissements]
     df = pd.DataFrame(rows, columns=[
         "siret", "denomination", "enseigne", "adresse",
         "code_postal", "commune", "departement", "date_creation",

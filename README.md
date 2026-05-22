@@ -91,7 +91,9 @@ Le fichier Excel atterrit dans `output/`, nommé avec les départements et la fe
 
 ## Personnaliser les codes NAF
 
-Si tu ajoutes des codes NAF dans `.env`, pense aussi à ajouter leur libellé dans le dict `NAF_LABELS` en haut de [main.py](main.py) — sinon la colonne `naf_libelle` sera vide pour ces codes.
+Ajoute/retire les codes que tu veux dans `NAF_CODES` (`.env`). Au premier lancement, le script va chercher automatiquement les libellés officiels via l'API INSEE Métadonnées (`api.insee.fr/metadonnees/V1/codes/nafr2/sousClasse/{code}`) et les met en cache dans `naf_cache.json`. Les lancements suivants sont 100% offline pour les libellés déjà connus.
+
+Si tu veux forcer un re-fetch (par ex. nouveau code ajouté), supprime simplement `naf_cache.json`.
 
 ---
 

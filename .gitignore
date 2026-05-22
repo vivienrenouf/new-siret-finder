@@ -18,3 +18,6 @@ wheels/
 # Generated exports
 *.xlsx
 output/
+
+# NAF metadata cache (rebuilt on demand from INSEE)
+naf_cache.json
